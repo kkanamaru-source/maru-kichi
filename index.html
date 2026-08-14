@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>マル基地</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%235b4cf0'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23ffffff' stroke-width='7'/%3E%3C/svg%3E" />
+<link rel="icon" type="image/svg+xml" id="faviconLink" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%235b4cf0'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23ffffff' stroke-width='7'/%3E%3C/svg%3E" />
 <style>
   :root {
     --bg: #fbfaff;
@@ -371,6 +371,62 @@
     .genre-filter-row { gap: 6px; }
     .note-item { padding: 12px; }
   }
+
+  .base-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #9d8fff;
+    letter-spacing: 0.03em;
+  }
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #b39dff;
+    box-shadow: 0 0 0 0 rgba(179,157,255,0.6);
+    animation: base-pulse 1.8s infinite;
+  }
+  @keyframes base-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(179,157,255,0.55); }
+    70% { box-shadow: 0 0 0 7px rgba(179,157,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(179,157,255,0); }
+  }
+
+  body.secret-mode {
+    --bg: #14121f;
+    --card: #1d1a2e;
+    --border: #332e52;
+    --text: #ece9fb;
+    --text-muted: #948dc2;
+    --accent: #8b7cff;
+    --accent-hover: #a394ff;
+    --danger: #ff6b6b;
+    background:
+      linear-gradient(rgba(139,124,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(139,124,255,0.05) 1px, transparent 1px),
+      linear-gradient(180deg, #1a1730 0%, #14121f 420px);
+    background-size: 28px 28px, 28px 28px, 100% 100%;
+  }
+  body.secret-mode header.app-header h1 { text-shadow: 0 0 16px rgba(139,124,255,0.55); }
+  body.secret-mode .composer,
+  body.secret-mode .note-item,
+  body.secret-mode .menu,
+  body.secret-mode .modal {
+    box-shadow: 0 0 0 1px rgba(139,124,255,0.12), 0 8px 24px rgba(0,0,0,0.35);
+  }
+  body.secret-mode .btn-primary { box-shadow: 0 0 18px rgba(139,124,255,0.5); }
+  body.secret-mode .btn-primary:hover { box-shadow: 0 0 22px rgba(163,148,255,0.65); }
+  body.secret-mode nav.sidebar li.active { box-shadow: 0 0 20px rgba(139,124,255,0.5); }
+  body.secret-mode .icon-btn { box-shadow: 0 0 12px rgba(139,124,255,0.35); }
+  body.secret-mode .composer select,
+  body.secret-mode .composer textarea,
+  body.secret-mode .modal input[type="text"],
+  body.secret-mode .modal input[type="password"] {
+    background: #211d38;
+  }
+  body.secret-mode .list-header input[type="search"] { background: #211d38; }
 </style>
 </head>
 <body>
@@ -380,9 +436,11 @@
     <button class="sidebar-toggle" id="sidebarToggle" title="カテゴリ">☰</button>
     <h1>マル基地</h1>
     <span class="subtitle">思いついたことを、置いておく場所</span>
+    <span class="base-status" id="baseStatus" style="display:none;"><span class="pulse-dot"></span>基地稼働中</span>
   </div>
   <div class="header-actions">
     <span class="sync-badge local" id="syncBadge"><span class="dot"></span><span id="syncBadgeText">ローカル保存のみ</span></span>
+    <button class="icon-btn" id="secretModeToggle" title="秘密基地モード">🔦</button>
     <button class="icon-btn" id="menuToggle" title="メニュー">⋯</button>
     <div class="menu" id="menu" style="display:none;">
       <button id="ghSettingsBtn">GitHub連携設定</button>
@@ -902,6 +960,27 @@
     searchQuery = searchInput.value;
     renderList();
   });
+
+  const SECRET_MODE_KEY = 'maru-kichi-secret-mode';
+  const FAVICON_LIGHT = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%235b4cf0'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%23ffffff' stroke-width='7'/%3E%3C/svg%3E";
+  const FAVICON_DARK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='2.4' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='%2314121f'/%3E%3Ccircle cx='32' cy='32' r='16' fill='none' stroke='%238b7cff' stroke-width='7' filter='url(%23g)'/%3E%3C/svg%3E";
+  const faviconLink = document.getElementById('faviconLink');
+  const secretModeToggle = document.getElementById('secretModeToggle');
+  const baseStatus = document.getElementById('baseStatus');
+
+  function isSecretMode() { return localStorage.getItem(SECRET_MODE_KEY) === 'on'; }
+  function applySecretMode(on) {
+    document.body.classList.toggle('secret-mode', on);
+    faviconLink.href = on ? FAVICON_DARK : FAVICON_LIGHT;
+    secretModeToggle.textContent = on ? '💡' : '🔦';
+    baseStatus.style.display = on ? 'flex' : 'none';
+  }
+  secretModeToggle.addEventListener('click', () => {
+    const next = !isSecretMode();
+    localStorage.setItem(SECRET_MODE_KEY, next ? 'on' : 'off');
+    applySecretMode(next);
+  });
+  applySecretMode(isSecretMode());
 
   const sidebarToggle = document.getElementById('sidebarToggle');
   const sidebarNav = document.getElementById('sidebarNav');
