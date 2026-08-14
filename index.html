@@ -397,19 +397,22 @@
   body.secret-mode {
     --bg: #14121f;
     --card: #1d1a2e;
-    --border: #332e52;
-    --text: #ece9fb;
-    --text-muted: #948dc2;
+    --border: #2b3540;
+    --text: #e7ece9;
+    --text-muted: #8b98a3;
     --accent: #8b7cff;
     --accent-hover: #a394ff;
     --danger: #ff6b6b;
-    background:
-      linear-gradient(rgba(139,124,255,0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(139,124,255,0.05) 1px, transparent 1px),
-      linear-gradient(180deg, #1a1730 0%, #14121f 420px);
-    background-size: 28px 28px, 28px 28px, 100% 100%;
+    background-color: #05070a;
+    background-image:
+      radial-gradient(ellipse 50% 38% at 20% 10%, rgba(255,196,120,0.16), transparent 62%),
+      radial-gradient(ellipse 40% 30% at 82% 42%, rgba(255,196,120,0.09), transparent 60%),
+      radial-gradient(ellipse 55% 42% at 65% 78%, rgba(139,124,255,0.10), transparent 65%),
+      radial-gradient(ellipse 100% 65% at 50% -5%, rgba(70,95,90,0.35), transparent 70%),
+      linear-gradient(180deg, #0b1013 0%, #05070a 60%);
+    background-attachment: fixed;
   }
-  body.secret-mode header.app-header h1 { text-shadow: 0 0 16px rgba(139,124,255,0.55); }
+  body.secret-mode header.app-header h1 { text-shadow: 0 0 18px rgba(255,196,120,0.45); }
   body.secret-mode .composer,
   body.secret-mode .note-item,
   body.secret-mode .menu,
