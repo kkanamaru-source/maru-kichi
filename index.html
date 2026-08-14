@@ -301,8 +301,11 @@
     gap: 12px;
     box-shadow: 0 1px 8px rgba(35,33,52,0.06);
   }
+  .note-item .note-main { flex: 1; min-width: 0; }
   .note-item .note-body { white-space: pre-wrap; font-size: 14px; line-height: 1.6; word-break: break-word; }
-  .note-item .note-meta { color: var(--text-muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; }
+  .note-item .note-meta { color: var(--text-muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .note-item .task-check { width: 17px; height: 17px; margin-top: 2px; flex-shrink: 0; cursor: pointer; accent-color: var(--accent); }
+  .note-item.done .note-body { text-decoration: line-through; color: var(--text-muted); }
   .note-item .delete-btn {
     background: none;
     border: none;
@@ -382,6 +385,7 @@
     <button class="icon-btn" id="menuToggle" title="メニュー">⋯</button>
     <div class="menu" id="menu" style="display:none;">
       <button id="ghSettingsBtn">GitHub連携設定</button>
+      <button id="sheetsSettingsBtn">スプレッドシート連携設定</button>
       <button id="exportBtn">JSONをエクスポート</button>
       <button id="importBtn">JSONをインポート</button>
     </div>
@@ -411,6 +415,23 @@
       </div>
     </div>
     <p class="modal-status" id="ghModalStatus"></p>
+  </div>
+</div>
+
+<div class="modal-overlay" id="sheetsModalOverlay" style="display:none;">
+  <div class="modal">
+    <h3>スプレッドシート連携設定</h3>
+    <p class="modal-desc">保存するたびに、全メモをGoogleスプレッドシートにも複製します（AIから参照するため）。Google Apps ScriptのWebアプリURLを入力してください。</p>
+    <label>Webアプリ URL</label>
+    <input type="text" id="sheetsWebhookUrl" placeholder="https://script.google.com/macros/s/.../exec" />
+    <div class="modal-footer">
+      <button class="btn-secondary" id="sheetsDisconnectBtn">連携を解除</button>
+      <div class="btn-group">
+        <button class="btn-secondary" id="sheetsCancelBtn">キャンセル</button>
+        <button class="btn-primary" id="sheetsSaveBtn">保存</button>
+      </div>
+    </div>
+    <p class="modal-status" id="sheetsModalStatus"></p>
   </div>
 </div>
 
@@ -493,6 +514,22 @@
   }
   function saveGhConfig(cfg) { localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(cfg)); }
   function clearGhConfig() { localStorage.removeItem(GH_CONFIG_KEY); }
+
+  const SHEETS_WEBHOOK_KEY = 'maru-kichi-sheets-webhook';
+  function loadSheetsWebhook() { return localStorage.getItem(SHEETS_WEBHOOK_KEY) || ''; }
+  function saveSheetsWebhook(url) { localStorage.setItem(SHEETS_WEBHOOK_KEY, url); }
+  function clearSheetsWebhook() { localStorage.removeItem(SHEETS_WEBHOOK_KEY); }
+
+  function sheetsSync() {
+    const url = loadSheetsWebhook();
+    if (!url) return;
+    fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(notes),
+    }).catch(e => console.error('sheets sync failed', e));
+  }
 
   function utf8ToBase64(str) {
     return btoa(String.fromCharCode(...new TextEncoder().encode(str)));
@@ -595,6 +632,7 @@
     } else {
       saveNotes(notes);
     }
+    sheetsSync();
   }
 
   let notes = loadNotes();
@@ -696,20 +734,37 @@
     for (const note of items) {
       const cat = categoryById(note.categoryId);
       const li = document.createElement('li');
-      li.className = 'note-item';
+      li.className = 'note-item' + (note.done ? ' done' : '');
       li.style.borderLeftColor = cat.color;
       const dt = new Date(note.createdAt);
       const dateStr = dt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       const metaCat = selectedCategoryId === ALL_ID ? `<span>${cat.icon} ${cat.label}</span>` : '';
       const metaGenre = note.genre ? `<span class="genre-badge">${genreById(note.genre).label}</span>` : '';
+      const isTask = note.categoryId === 'tasks';
+      const metaDone = note.done && note.completedAt
+        ? `<span>✅ ${new Date(note.completedAt).toLocaleDateString('ja-JP')} 完了</span>`
+        : '';
+      const checkboxHtml = isTask
+        ? `<input type="checkbox" class="task-check" ${note.done ? 'checked' : ''} title="完了にする" />`
+        : '';
       li.innerHTML = `
-        <div>
+        ${checkboxHtml}
+        <div class="note-main">
           <div class="note-body"></div>
-          <div class="note-meta">${metaCat}${metaGenre}<span>${dateStr}</span></div>
+          <div class="note-meta">${metaCat}${metaGenre}${metaDone}<span>${dateStr}</span></div>
         </div>
         <button class="delete-btn" title="削除">✕</button>
       `;
       li.querySelector('.note-body').textContent = note.text;
+      if (isTask) {
+        li.querySelector('.task-check').addEventListener('change', (e) => {
+          note.done = e.target.checked;
+          note.completedAt = note.done ? Date.now() : null;
+          note.updatedAt = Date.now();
+          persist();
+          render();
+        });
+      }
       li.querySelector('.delete-btn').addEventListener('click', () => {
         notes = notes.filter(n => n.id !== note.id);
         persist();
@@ -749,6 +804,9 @@
       genre: GENRE_CATEGORY_IDS.includes(addCategoryId) ? addGenre : null,
       text,
       createdAt: Date.now(),
+      updatedAt: Date.now(),
+      done: false,
+      completedAt: null,
     });
     persist();
     noteInput.value = '';
@@ -908,6 +966,42 @@
       ghModalStatus.textContent = '接続に失敗しました。ユーザー名・リポジトリ名・トークンの権限を確認してください。';
       ghModalStatus.className = 'modal-status error';
     }
+  });
+
+  const sheetsModalOverlay = document.getElementById('sheetsModalOverlay');
+  const sheetsWebhookInput = document.getElementById('sheetsWebhookUrl');
+  const sheetsModalStatus = document.getElementById('sheetsModalStatus');
+
+  function openSheetsModal() {
+    menu.style.display = 'none';
+    sheetsWebhookInput.value = loadSheetsWebhook();
+    sheetsModalStatus.textContent = '';
+    sheetsModalStatus.className = 'modal-status';
+    sheetsModalOverlay.style.display = 'flex';
+  }
+  function closeSheetsModal() { sheetsModalOverlay.style.display = 'none'; }
+
+  document.getElementById('sheetsSettingsBtn').addEventListener('click', openSheetsModal);
+  document.getElementById('sheetsCancelBtn').addEventListener('click', closeSheetsModal);
+  sheetsModalOverlay.addEventListener('click', (e) => {
+    if (e.target === sheetsModalOverlay) closeSheetsModal();
+  });
+  document.getElementById('sheetsDisconnectBtn').addEventListener('click', () => {
+    clearSheetsWebhook();
+    closeSheetsModal();
+  });
+  document.getElementById('sheetsSaveBtn').addEventListener('click', () => {
+    const url = sheetsWebhookInput.value.trim();
+    if (!url) {
+      sheetsModalStatus.textContent = 'URLを入力してください。';
+      sheetsModalStatus.className = 'modal-status error';
+      return;
+    }
+    saveSheetsWebhook(url);
+    sheetsSync();
+    sheetsModalStatus.textContent = '保存しました。';
+    sheetsModalStatus.className = 'modal-status ok';
+    setTimeout(closeSheetsModal, 700);
   });
 
   async function initApp() {
