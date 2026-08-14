@@ -314,12 +314,66 @@
     flex-shrink: 0;
   }
   .note-item .delete-btn:hover { color: var(--danger); }
+
+  .sidebar-toggle { display: none; }
+  .sidebar-overlay { display: none; }
+
+  @media (max-width: 860px) {
+    header.app-header { padding: 14px 16px; }
+    header.app-header .subtitle { display: none; }
+    header.app-header h1 { font-size: 18px; }
+    .sidebar-toggle {
+      display: flex;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+    .layout { flex-direction: column; padding: 16px; gap: 16px; }
+    nav.sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 78vw;
+      max-width: 300px;
+      background: var(--card);
+      z-index: 60;
+      padding: 74px 16px 16px;
+      overflow-y: auto;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: 4px 0 28px rgba(35,33,52,0.22);
+    }
+    nav.sidebar.open { transform: translateX(0); }
+    .sidebar-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(20,18,35,0.4);
+      z-index: 55;
+    }
+    .sidebar-overlay.show { display: block; }
+    .composer select { width: 100%; margin-right: 0; }
+    .composer select#genreSelect { margin-left: 0; }
+    .list-header { flex-direction: column; align-items: stretch; gap: 10px; }
+    .list-header input[type="search"] { width: 100%; }
+    .genre-filter-row { gap: 6px; }
+    .note-item { padding: 12px; }
+  }
 </style>
 </head>
 <body>
 
 <header class="app-header">
   <div class="titles">
+    <button class="sidebar-toggle" id="sidebarToggle" title="カテゴリ">☰</button>
     <h1>マル基地</h1>
     <span class="subtitle">思いついたことを、置いておく場所</span>
   </div>
@@ -361,7 +415,8 @@
 </div>
 
 <div class="layout">
-  <nav class="sidebar">
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <nav class="sidebar" id="sidebarNav">
     <ul id="sidebarList"></ul>
   </nav>
 
@@ -587,6 +642,7 @@
           categorySelect.value = item.id;
         }
         render();
+        closeSidebar();
       });
       sidebarList.appendChild(li);
     }
@@ -723,6 +779,22 @@
     searchQuery = searchInput.value;
     renderList();
   });
+
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebarNav = document.getElementById('sidebarNav');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  function openSidebar() {
+    sidebarNav.classList.add('open');
+    sidebarOverlay.classList.add('show');
+  }
+  function closeSidebar() {
+    sidebarNav.classList.remove('open');
+    sidebarOverlay.classList.remove('show');
+  }
+  sidebarToggle.addEventListener('click', () => {
+    sidebarNav.classList.contains('open') ? closeSidebar() : openSidebar();
+  });
+  sidebarOverlay.addEventListener('click', closeSidebar);
 
   const menuToggle = document.getElementById('menuToggle');
   const menu = document.getElementById('menu');
