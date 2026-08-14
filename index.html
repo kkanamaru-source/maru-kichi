@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>マル基地</title>
+<style>
+  :root {
+    --bg: #fbfaff;
+    --card: #ffffff;
+    --border: #ece9fb;
+    --text: #232134;
+    --text-muted: #77738f;
+    --accent: #5b4cf0;
+    --accent-hover: #4a3ce0;
+    --danger: #e0503b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: linear-gradient(180deg, #f2effc 0%, #fbfaff 320px);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", "Segoe UI", sans-serif;
+  }
+  header.app-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 22px 40px;
+    background: transparent;
+  }
+  header.app-header .titles {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header.app-header h1 {
+    margin: 0;
+    font-size: 20px;
+    color: var(--accent);
+  }
+  header.app-header .subtitle {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .header-actions { display: flex; align-items: center; gap: 10px; position: relative; }
+  .sync-badge {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sync-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #b7c3e8; display: inline-block; }
+  .sync-badge.synced .dot { background: #2ecc71; }
+  .sync-badge.syncing .dot { background: #ff9f43; }
+  .sync-badge.error .dot { background: var(--danger); }
+  .sync-badge.local .dot { background: #b7c3e8; }
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-btn:hover { background: var(--accent-hover); }
+  .menu {
+    position: absolute;
+    top: 40px;
+    right: 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 180px;
+    overflow: hidden;
+    z-index: 10;
+  }
+  .menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .menu button:hover { background: var(--bg); }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(35,33,52,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 26px;
+    width: 420px;
+    max-width: 90vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(35,33,52,0.25);
+  }
+  .modal h3 { margin: 0 0 6px; font-size: 17px; color: var(--text); }
+  .modal-desc { color: var(--text-muted); font-size: 12.5px; margin: 0 0 18px; line-height: 1.6; }
+  .modal label { display: block; font-size: 12.5px; color: var(--text-muted); margin: 12px 0 4px; }
+  .modal input[type="text"], .modal input[type="password"] {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 13.5px;
+    background: #fdfcff;
+    color: var(--text);
+  }
+  .modal input:focus { outline: 2px solid #d6cffb; }
+  .modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 20px;
+    gap: 8px;
+  }
+  .modal-footer .btn-group { display: flex; gap: 8px; }
+  .btn-secondary {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+  .btn-secondary:hover { background: #f6f4fe; }
+  .modal-status { font-size: 12.5px; margin: 14px 0 0; color: var(--text-muted); min-height: 16px; }
+  .modal-status.error { color: var(--danger); }
+  .modal-status.ok { color: #1a9e56; }
+
+  .layout {
+    display: flex;
+    gap: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px 40px;
+    align-items: flex-start;
+  }
+  nav.sidebar {
+    width: 260px;
+    flex-shrink: 0;
+  }
+  nav.sidebar ul { list-style: none; margin: 0; padding: 0; }
+  nav.sidebar li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 2px;
+    font-size: 14px;
+  }
+  nav.sidebar li:hover { background: #efebfd; }
+  nav.sidebar li.active { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(91,76,240,0.35); }
+  nav.sidebar li.active .count { color: rgba(255,255,255,0.85); }
+  nav.sidebar li .label { display: flex; align-items: center; gap: 10px; }
+  nav.sidebar li .count { color: var(--text-muted); font-size: 13px; }
+  nav.sidebar li.active .count { color: rgba(255,255,255,0.85); }
+  .cat-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+  main.content { flex: 1; min-width: 0; }
+
+  .composer {
+    background: var(--card);
+    border: none;
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 16px rgba(91,76,240,0.08);
+  }
+  .composer select {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #f6f4fe;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  .composer select#genreSelect { margin-left: 8px; }
+  .composer textarea {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--text);
+    background: #fdfcff;
+  }
+  .composer textarea:focus, .composer select:focus { outline: 2px solid #d6cffb; }
+  .composer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+  .hint { color: var(--text-muted); font-size: 12px; }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 22px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { background: #b7c3e8; cursor: not-allowed; }
+
+  .list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .list-header h2 {
+    font-size: 16px;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .list-header .list-count { color: var(--text-muted); font-weight: normal; font-size: 14px; }
+  .list-header input[type="search"] {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    width: 220px;
+    background: var(--card);
+  }
+  .list-header input[type="search"]:focus { outline: 2px solid #d6cffb; }
+
+  .genre-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .genre-pill {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .genre-pill:hover { background: #efebfd; }
+  .genre-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .genre-badge {
+    background: #f0edfe;
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11.5px;
+  }
+
+  .empty-state {
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 30px 4px;
+  }
+
+  ul.note-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .note-item {
+    background: var(--card);
+    border: none;
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    box-shadow: 0 1px 8px rgba(35,33,52,0.06);
+  }
+  .note-item .note-body { white-space: pre-wrap; font-size: 14px; line-height: 1.6; word-break: break-word; }
+  .note-item .note-meta { color: var(--text-muted); font-size: 12px; margin-top: 6px; display: flex; gap: 8px; }
+  .note-item .delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+  .note-item .delete-btn:hover { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="titles">
+    <h1>マル基地</h1>
+    <span class="subtitle">思いついたことを、置いておく場所</span>
+  </div>
+  <div class="header-actions">
+    <span class="sync-badge local" id="syncBadge"><span class="dot"></span><span id="syncBadgeText">ローカル保存のみ</span></span>
+    <button class="icon-btn" id="menuToggle" title="メニュー">⋯</button>
+    <div class="menu" id="menu" style="display:none;">
+      <button id="ghSettingsBtn">GitHub連携設定</button>
+      <button id="exportBtn">JSONをエクスポート</button>
+      <button id="importBtn">JSONをインポート</button>
+    </div>
+    <input type="file" id="importFile" accept="application/json" style="display:none;" />
+  </div>
+</header>
+
+<div class="modal-overlay" id="ghModalOverlay" style="display:none;">
+  <div class="modal">
+    <h3>GitHub連携設定</h3>
+    <p class="modal-desc">GitHubリポジトリにメモを保存すると、スマホとPCで同じ内容が見られるようになります。トークンはこの端末のブラウザだけに保存され、外部には送信されません。</p>
+    <label>GitHubユーザー名（Owner）</label>
+    <input type="text" id="ghOwner" placeholder="例: kanamaru-kenya" />
+    <label>リポジトリ名</label>
+    <input type="text" id="ghRepo" placeholder="例: maru-kichi" />
+    <label>ファイルパス</label>
+    <input type="text" id="ghPath" value="notes.json" />
+    <label>ブランチ</label>
+    <input type="text" id="ghBranch" value="main" />
+    <label>Personal Access Token（repo権限）</label>
+    <input type="password" id="ghToken" placeholder="ghp_..." />
+    <div class="modal-footer">
+      <button class="btn-secondary" id="ghDisconnectBtn">連携を解除</button>
+      <div class="btn-group">
+        <button class="btn-secondary" id="ghCancelBtn">キャンセル</button>
+        <button class="btn-primary" id="ghSaveBtn">保存して接続</button>
+      </div>
+    </div>
+    <p class="modal-status" id="ghModalStatus"></p>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="sidebar">
+    <ul id="sidebarList"></ul>
+  </nav>
+
+  <main class="content">
+    <div class="composer">
+      <select id="categorySelect"></select>
+      <select id="genreSelect" style="display:none;"></select>
+      <textarea id="noteInput"></textarea>
+      <div class="composer-footer">
+        <span class="hint">⌘/Ctrl + Enter で追加</span>
+        <button class="btn-primary" id="addBtn">追加</button>
+      </div>
+    </div>
+
+    <div class="list-header">
+      <h2 id="listTitle"></h2>
+      <input type="search" id="searchInput" placeholder="検索" />
+    </div>
+
+    <div class="genre-filter-row" id="genreFilterRow" style="display:none;"></div>
+
+    <div id="listContainer"></div>
+  </main>
+</div>
+
+<script>
+  const STORAGE_KEY = 'maru-kichi-notes-v1';
+
+  const CATEGORIES = [
+    { id: 'systemize', icon: '⚙️', label: '仕組み化', color: '#7c5cff', placeholder: 'どんな業務・判断を、どう仕組み化したいか' },
+    { id: 'routine_ops', icon: '🔁', label: '定例業務', color: '#ff9f43', placeholder: '何を、どのくらいの頻度で、いつ忘れがちか' },
+    { id: 'tasks', icon: '✅', label: 'タスク', color: '#2ecc71', placeholder: '何を、いつまでにやるか' },
+    { id: 'to_think', icon: '🧠', label: '考えなきゃいけないこと', color: '#17a2b8', placeholder: '何について、いつまでに考えを整理・決断する必要があるか' },
+    { id: 'member_traits', icon: '👤', label: 'メンバー特性', color: '#ff6b9d', placeholder: '誰の、どんな性格・趣向・強み弱みに気づいたか' },
+    { id: 'management_pattern', icon: '📐', label: '経営の型', color: '#3b66e0', placeholder: '何が、なぜうまくいった/いかなかったか。他に応用できる型は何か' },
+  ];
+  const ALL_ID = 'all';
+
+  const GENRES = [
+    { id: 'admin', label: '事務作業周り' },
+    { id: 'hr_corp', label: '採用・コーポレート' },
+    { id: 'systemization', label: '仕組み化' },
+    { id: 'sales_marketing', label: 'セールス・マーケ' },
+    { id: 'cs', label: 'CS' },
+    { id: 'new_biz', label: '新規事業' },
+  ];
+  const GENRE_CATEGORY_IDS = ['systemize', 'routine_ops', 'tasks', 'to_think'];
+
+  function genreById(id) {
+    return GENRES.find(g => g.id === id);
+  }
+
+  function loadNotes() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      console.error('failed to load notes', e);
+      return [];
+    }
+  }
+  function saveNotes(notes) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+  }
+
+  const GH_CONFIG_KEY = 'maru-kichi-gh-config';
+  function loadGhConfig() {
+    try {
+      const raw = localStorage.getItem(GH_CONFIG_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function saveGhConfig(cfg) { localStorage.setItem(GH_CONFIG_KEY, JSON.stringify(cfg)); }
+  function clearGhConfig() { localStorage.removeItem(GH_CONFIG_KEY); }
+
+  function utf8ToBase64(str) {
+    return btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+  }
+  function base64ToUtf8(b64) {
+    const binary = atob(b64.replace(/\n/g, ''));
+    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  async function ghFetch(pathWithQuery, options = {}) {
+    const url = `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${pathWithQuery}`;
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Authorization': `token ${ghConfig.token}`,
+        'Accept': 'application/vnd.github+json',
+        ...(options.headers || {}),
+      },
+    });
+  }
+
+  function setSyncStatus(status) {
+    syncStatus = status;
+    updateSyncBadge();
+  }
+
+  function updateSyncBadge() {
+    const badge = document.getElementById('syncBadge');
+    const text = document.getElementById('syncBadgeText');
+    if (!badge || !text) return;
+    badge.className = 'sync-badge ' + syncStatus;
+    const labels = {
+      local: 'ローカル保存のみ',
+      syncing: '同期中…',
+      synced: 'GitHubと同期済み',
+      error: '同期エラー（ローカルに保存）',
+    };
+    text.textContent = labels[syncStatus] || '';
+  }
+
+  async function ghLoad() {
+    setSyncStatus('syncing');
+    try {
+      const res = await ghFetch(`${encodeURIComponent(ghConfig.path)}?ref=${encodeURIComponent(ghConfig.branch)}`);
+      if (res.status === 404) {
+        await ghSave([]);
+        notes = [];
+        setSyncStatus('synced');
+        return;
+      }
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+      const data = await res.json();
+      ghSha = data.sha;
+      notes = JSON.parse(base64ToUtf8(data.content));
+      saveNotes(notes);
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('ghLoad failed', e);
+      setSyncStatus('error');
+    }
+  }
+
+  async function ghSave(notesArray, retry = true) {
+    setSyncStatus('syncing');
+    try {
+      const body = {
+        message: `update notes ${new Date().toISOString()}`,
+        content: utf8ToBase64(JSON.stringify(notesArray, null, 2)),
+        branch: ghConfig.branch,
+      };
+      if (ghSha) body.sha = ghSha;
+      const res = await ghFetch(encodeURIComponent(ghConfig.path), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if ((res.status === 409 || res.status === 422) && retry) {
+        const latest = await ghFetch(`${encodeURIComponent(ghConfig.path)}?ref=${encodeURIComponent(ghConfig.branch)}`);
+        if (latest.ok) {
+          const latestData = await latest.json();
+          ghSha = latestData.sha;
+          return ghSave(notesArray, false);
+        }
+      }
+      if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+      const data = await res.json();
+      ghSha = data.content.sha;
+      saveNotes(notesArray);
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('ghSave failed', e);
+      setSyncStatus('error');
+    }
+  }
+
+  function persist() {
+    if (ghConfig) {
+      ghSave(notes);
+    } else {
+      saveNotes(notes);
+    }
+  }
+
+  let notes = loadNotes();
+  let selectedCategoryId = ALL_ID;
+  let addCategoryId = CATEGORIES[0].id;
+  let addGenre = GENRES[0].id;
+  let selectedGenre = null;
+  let searchQuery = '';
+  let ghConfig = loadGhConfig();
+  let ghSha = null;
+  let syncStatus = ghConfig ? 'syncing' : 'local';
+
+  const sidebarList = document.getElementById('sidebarList');
+  const categorySelect = document.getElementById('categorySelect');
+  const genreSelect = document.getElementById('genreSelect');
+  const genreFilterRow = document.getElementById('genreFilterRow');
+  const noteInput = document.getElementById('noteInput');
+  const addBtn = document.getElementById('addBtn');
+  const listTitle = document.getElementById('listTitle');
+  const listContainer = document.getElementById('listContainer');
+  const searchInput = document.getElementById('searchInput');
+
+  function categoryById(id) {
+    return CATEGORIES.find(c => c.id === id);
+  }
+
+  function countFor(id) {
+    if (id === ALL_ID) return notes.length;
+    return notes.filter(n => n.categoryId === id).length;
+  }
+
+  function renderSidebar() {
+    sidebarList.innerHTML = '';
+    const items = [{ id: ALL_ID, icon: '📁', label: 'すべて', color: null }, ...CATEGORIES];
+    for (const item of items) {
+      const li = document.createElement('li');
+      li.className = item.id === selectedCategoryId ? 'active' : '';
+      const dot = item.color ? `<span class="cat-dot" style="background:${item.color}"></span>` : '';
+      li.innerHTML = `<span class="label">${dot}${item.icon} ${item.label}</span><span class="count">${countFor(item.id)}</span>`;
+      li.addEventListener('click', () => {
+        selectedCategoryId = item.id;
+        selectedGenre = null;
+        if (item.id !== ALL_ID) {
+          addCategoryId = item.id;
+          categorySelect.value = item.id;
+        }
+        render();
+      });
+      sidebarList.appendChild(li);
+    }
+  }
+
+  function renderCategorySelect() {
+    categorySelect.innerHTML = CATEGORIES.map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join('');
+    categorySelect.value = addCategoryId;
+    noteInput.placeholder = categoryById(addCategoryId).placeholder;
+
+    const showGenre = GENRE_CATEGORY_IDS.includes(addCategoryId);
+    genreSelect.style.display = showGenre ? '' : 'none';
+    if (showGenre) {
+      genreSelect.innerHTML = GENRES.map(g => `<option value="${g.id}">${g.label}</option>`).join('');
+      genreSelect.value = addGenre;
+    }
+  }
+
+  function renderGenreFilterRow() {
+    const showFilter = GENRE_CATEGORY_IDS.includes(selectedCategoryId);
+    genreFilterRow.style.display = showFilter ? '' : 'none';
+    if (!showFilter) return;
+    const pills = [{ id: null, label: 'すべて' }, ...GENRES];
+    genreFilterRow.innerHTML = '';
+    for (const g of pills) {
+      const btn = document.createElement('button');
+      btn.className = 'genre-pill' + (selectedGenre === g.id ? ' active' : '');
+      btn.textContent = g.label;
+      btn.addEventListener('click', () => {
+        selectedGenre = g.id;
+        render();
+      });
+      genreFilterRow.appendChild(btn);
+    }
+  }
+
+  function renderList() {
+    const activeCat = selectedCategoryId === ALL_ID ? null : categoryById(selectedCategoryId);
+    listTitle.innerHTML = selectedCategoryId === ALL_ID
+      ? `📁 すべて <span class="list-count">${filteredNotes().length}件</span>`
+      : `${activeCat.icon} ${activeCat.label} <span class="list-count">${filteredNotes().length}件</span>`;
+
+    const items = filteredNotes();
+    if (items.length === 0) {
+      listContainer.innerHTML = `<div class="empty-state">まだ何もありません。上の欄に書いてみてください。</div>`;
+      return;
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'note-list';
+    for (const note of items) {
+      const cat = categoryById(note.categoryId);
+      const li = document.createElement('li');
+      li.className = 'note-item';
+      li.style.borderLeftColor = cat.color;
+      const dt = new Date(note.createdAt);
+      const dateStr = dt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const metaCat = selectedCategoryId === ALL_ID ? `<span>${cat.icon} ${cat.label}</span>` : '';
+      const metaGenre = note.genre ? `<span class="genre-badge">${genreById(note.genre).label}</span>` : '';
+      li.innerHTML = `
+        <div>
+          <div class="note-body"></div>
+          <div class="note-meta">${metaCat}${metaGenre}<span>${dateStr}</span></div>
+        </div>
+        <button class="delete-btn" title="削除">✕</button>
+      `;
+      li.querySelector('.note-body').textContent = note.text;
+      li.querySelector('.delete-btn').addEventListener('click', () => {
+        notes = notes.filter(n => n.id !== note.id);
+        persist();
+        render();
+      });
+      ul.appendChild(li);
+    }
+    listContainer.innerHTML = '';
+    listContainer.appendChild(ul);
+  }
+
+  function filteredNotes() {
+    let items = selectedCategoryId === ALL_ID ? notes : notes.filter(n => n.categoryId === selectedCategoryId);
+    if (selectedGenre && GENRE_CATEGORY_IDS.includes(selectedCategoryId)) {
+      items = items.filter(n => n.genre === selectedGenre);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      items = items.filter(n => n.text.toLowerCase().includes(q));
+    }
+    return [...items].sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  function render() {
+    renderSidebar();
+    renderCategorySelect();
+    renderGenreFilterRow();
+    renderList();
+  }
+
+  function addNote() {
+    const text = noteInput.value.trim();
+    if (!text) return;
+    notes.push({
+      id: crypto.randomUUID(),
+      categoryId: addCategoryId,
+      genre: GENRE_CATEGORY_IDS.includes(addCategoryId) ? addGenre : null,
+      text,
+      createdAt: Date.now(),
+    });
+    persist();
+    noteInput.value = '';
+    selectedCategoryId = addCategoryId;
+    render();
+    noteInput.focus();
+  }
+
+  addBtn.addEventListener('click', addNote);
+  noteInput.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      addNote();
+    }
+  });
+  categorySelect.addEventListener('change', () => {
+    addCategoryId = categorySelect.value;
+    selectedCategoryId = addCategoryId;
+    selectedGenre = null;
+    if (GENRE_CATEGORY_IDS.includes(addCategoryId)) addGenre = GENRES[0].id;
+    noteInput.placeholder = categoryById(addCategoryId).placeholder;
+    render();
+  });
+  genreSelect.addEventListener('change', () => {
+    addGenre = genreSelect.value;
+  });
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value;
+    renderList();
+  });
+
+  const menuToggle = document.getElementById('menuToggle');
+  const menu = document.getElementById('menu');
+  menuToggle.addEventListener('click', () => {
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && e.target !== menuToggle) menu.style.display = 'none';
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify(notes, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `maru-kichi-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    menu.style.display = 'none';
+  });
+
+  const importFile = document.getElementById('importFile');
+  document.getElementById('importBtn').addEventListener('click', () => {
+    importFile.click();
+    menu.style.display = 'none';
+  });
+  importFile.addEventListener('change', () => {
+    const file = importFile.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const imported = JSON.parse(reader.result);
+        if (!Array.isArray(imported)) throw new Error('invalid format');
+        const existingIds = new Set(notes.map(n => n.id));
+        const merged = notes.concat(imported.filter(n => n && n.id && !existingIds.has(n.id)));
+        notes = merged;
+        persist();
+        render();
+      } catch (e) {
+        alert('インポートに失敗しました。ファイル形式を確認してください。');
+      }
+      importFile.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+  const ghModalOverlay = document.getElementById('ghModalOverlay');
+  const ghOwnerInput = document.getElementById('ghOwner');
+  const ghRepoInput = document.getElementById('ghRepo');
+  const ghPathInput = document.getElementById('ghPath');
+  const ghBranchInput = document.getElementById('ghBranch');
+  const ghTokenInput = document.getElementById('ghToken');
+  const ghModalStatus = document.getElementById('ghModalStatus');
+
+  function openGhModal() {
+    menu.style.display = 'none';
+    const cfg = ghConfig || {};
+    ghOwnerInput.value = cfg.owner || '';
+    ghRepoInput.value = cfg.repo || '';
+    ghPathInput.value = cfg.path || 'notes.json';
+    ghBranchInput.value = cfg.branch || 'main';
+    ghTokenInput.value = cfg.token || '';
+    ghModalStatus.textContent = '';
+    ghModalStatus.className = 'modal-status';
+    ghModalOverlay.style.display = 'flex';
+  }
+  function closeGhModal() { ghModalOverlay.style.display = 'none'; }
+
+  document.getElementById('ghSettingsBtn').addEventListener('click', openGhModal);
+  document.getElementById('ghCancelBtn').addEventListener('click', closeGhModal);
+  ghModalOverlay.addEventListener('click', (e) => {
+    if (e.target === ghModalOverlay) closeGhModal();
+  });
+
+  document.getElementById('ghDisconnectBtn').addEventListener('click', () => {
+    clearGhConfig();
+    ghConfig = null;
+    ghSha = null;
+    setSyncStatus('local');
+    closeGhModal();
+    render();
+  });
+
+  document.getElementById('ghSaveBtn').addEventListener('click', async () => {
+    const owner = ghOwnerInput.value.trim();
+    const repo = ghRepoInput.value.trim();
+    const path = ghPathInput.value.trim() || 'notes.json';
+    const branch = ghBranchInput.value.trim() || 'main';
+    const token = ghTokenInput.value.trim();
+    if (!owner || !repo || !token) {
+      ghModalStatus.textContent = 'ユーザー名・リポジトリ名・トークンは必須です。';
+      ghModalStatus.className = 'modal-status error';
+      return;
+    }
+    ghModalStatus.textContent = '接続を確認しています…';
+    ghModalStatus.className = 'modal-status';
+    const newConfig = { owner, repo, path, branch, token };
+    ghConfig = newConfig;
+    ghSha = null;
+    await ghLoad();
+    if (syncStatus === 'synced') {
+      saveGhConfig(newConfig);
+      ghModalStatus.textContent = '接続できました。';
+      ghModalStatus.className = 'modal-status ok';
+      render();
+      setTimeout(closeGhModal, 700);
+    } else {
+      ghConfig = loadGhConfig();
+      ghModalStatus.textContent = '接続に失敗しました。ユーザー名・リポジトリ名・トークンの権限を確認してください。';
+      ghModalStatus.className = 'modal-status error';
+    }
+  });
+
+  async function initApp() {
+    updateSyncBadge();
+    if (ghConfig) {
+      await ghLoad();
+    }
+    render();
+  }
+  initApp();
+</script>
+</body>
+</html>
