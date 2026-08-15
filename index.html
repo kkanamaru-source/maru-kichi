@@ -201,6 +201,7 @@
     margin-bottom: 12px;
   }
   .composer select#genreSelect { margin-left: 8px; }
+  .composer select#memberSelect { margin-left: 8px; }
   .composer textarea {
     width: 100%;
     min-height: 90px;
@@ -369,6 +370,7 @@
     .sidebar-overlay.show { display: block; }
     .composer select { width: 100%; margin-right: 0; }
     .composer select#genreSelect { margin-left: 0; }
+    .composer select#memberSelect { margin-left: 0; }
     .list-header { flex-direction: column; align-items: stretch; gap: 10px; }
     .list-header input[type="search"] { width: 100%; }
     .genre-filter-row { gap: 6px; }
@@ -527,6 +529,7 @@
     <div class="composer">
       <select id="categorySelect"></select>
       <select id="genreSelect" style="display:none;"></select>
+      <select id="memberSelect" style="display:none;"></select>
       <select id="frequencySelect" style="display:none;"></select>
       <textarea id="noteInput"></textarea>
       <div class="composer-footer">
@@ -541,6 +544,7 @@
     </div>
 
     <div class="genre-filter-row" id="genreFilterRow" style="display:none;"></div>
+    <div class="genre-filter-row" id="memberFilterRow" style="display:none;"></div>
 
     <div id="listContainer"></div>
   </main>
@@ -572,6 +576,14 @@
   ];
   const GENRE_CATEGORY_IDS = ['systemize', 'routine_ops', 'tasks', 'to_think', 'memo'];
 
+  const MEMBERS = [
+    { id: 'maru', label: 'マル' },
+    { id: 'yuma', label: '悠馬' },
+    { id: 'hiroto', label: '大翔' },
+    { id: 'leo', label: 'レオ' },
+  ];
+  const MEMBER_CATEGORY_IDS = ['member_traits'];
+
   const FREQUENCIES = [
     { id: 'daily', label: '毎日', days: 1 },
     { id: 'weekly', label: '毎週', days: 7 },
@@ -582,6 +594,9 @@
 
   function genreById(id) {
     return GENRES.find(g => g.id === id);
+  }
+  function memberById(id) {
+    return MEMBERS.find(m => m.id === id);
   }
   function frequencyById(id) {
     return FREQUENCIES.find(f => f.id === id);
@@ -766,8 +781,10 @@
   let selectedCategoryId = ALL_ID;
   let addCategoryId = CATEGORIES[0].id;
   let addGenre = GENRES[0].id;
+  let addMember = MEMBERS[0].id;
   let addFrequency = FREQUENCIES[1].id;
   let selectedGenre = null;
+  let selectedMember = null;
   let searchQuery = '';
   let ghConfig = loadGhConfig();
   let ghSha = null;
@@ -776,8 +793,10 @@
   const sidebarList = document.getElementById('sidebarList');
   const categorySelect = document.getElementById('categorySelect');
   const genreSelect = document.getElementById('genreSelect');
+  const memberSelect = document.getElementById('memberSelect');
   const frequencySelect = document.getElementById('frequencySelect');
   const genreFilterRow = document.getElementById('genreFilterRow');
+  const memberFilterRow = document.getElementById('memberFilterRow');
   const noteInput = document.getElementById('noteInput');
   const addBtn = document.getElementById('addBtn');
   const listTitle = document.getElementById('listTitle');
@@ -804,6 +823,7 @@
       li.addEventListener('click', () => {
         selectedCategoryId = item.id;
         selectedGenre = null;
+        selectedMember = null;
         if (item.id !== ALL_ID) {
           addCategoryId = item.id;
           categorySelect.value = item.id;
@@ -825,6 +845,13 @@
     if (showGenre) {
       genreSelect.innerHTML = GENRES.map(g => `<option value="${g.id}">${g.label}</option>`).join('');
       genreSelect.value = addGenre;
+    }
+
+    const showMember = MEMBER_CATEGORY_IDS.includes(addCategoryId);
+    memberSelect.style.display = showMember ? '' : 'none';
+    if (showMember) {
+      memberSelect.innerHTML = MEMBERS.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+      memberSelect.value = addMember;
     }
 
     const showFrequency = addCategoryId === 'routine_ops';
@@ -853,6 +880,24 @@
     }
   }
 
+  function renderMemberFilterRow() {
+    const showFilter = MEMBER_CATEGORY_IDS.includes(selectedCategoryId);
+    memberFilterRow.style.display = showFilter ? '' : 'none';
+    if (!showFilter) return;
+    const pills = [{ id: null, label: 'すべて' }, ...MEMBERS];
+    memberFilterRow.innerHTML = '';
+    for (const m of pills) {
+      const btn = document.createElement('button');
+      btn.className = 'genre-pill' + (selectedMember === m.id ? ' active' : '');
+      btn.textContent = m.label;
+      btn.addEventListener('click', () => {
+        selectedMember = m.id;
+        render();
+      });
+      memberFilterRow.appendChild(btn);
+    }
+  }
+
   function renderList() {
     const activeCat = selectedCategoryId === ALL_ID ? null : categoryById(selectedCategoryId);
     listTitle.innerHTML = selectedCategoryId === ALL_ID
@@ -876,6 +921,7 @@
       const dateStr = dt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       const metaCat = selectedCategoryId === ALL_ID ? `<span>${cat.icon} ${cat.label}</span>` : '';
       const metaGenre = note.genre ? `<span class="genre-badge">${genreById(note.genre).label}</span>` : '';
+      const metaMember = note.member ? `<span class="genre-badge">${memberById(note.member).label}</span>` : '';
       const isTask = note.categoryId === 'tasks';
       const metaDone = note.done && note.completedAt
         ? `<span>✅ ${new Date(note.completedAt).toLocaleDateString('ja-JP')} 完了</span>`
@@ -893,7 +939,7 @@
         ${checkboxHtml}
         <div class="note-main">
           <div class="note-body"></div>
-          <div class="note-meta">${metaCat}${metaGenre}${metaFrequency}${metaAutoGenerated}${metaDone}<span>${dateStr}</span></div>
+          <div class="note-meta">${metaCat}${metaGenre}${metaMember}${metaFrequency}${metaAutoGenerated}${metaDone}<span>${dateStr}</span></div>
         </div>
         <button class="delete-btn" title="削除">✕</button>
       `;
@@ -923,6 +969,9 @@
     if (selectedGenre && GENRE_CATEGORY_IDS.includes(selectedCategoryId)) {
       items = items.filter(n => n.genre === selectedGenre);
     }
+    if (selectedMember && MEMBER_CATEGORY_IDS.includes(selectedCategoryId)) {
+      items = items.filter(n => n.member === selectedMember);
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       items = items.filter(n => n.text.toLowerCase().includes(q));
@@ -934,6 +983,7 @@
     renderSidebar();
     renderCategorySelect();
     renderGenreFilterRow();
+    renderMemberFilterRow();
     renderList();
   }
 
@@ -945,6 +995,7 @@
       id: crypto.randomUUID(),
       categoryId: addCategoryId,
       genre: GENRE_CATEGORY_IDS.includes(addCategoryId) ? addGenre : null,
+      member: MEMBER_CATEGORY_IDS.includes(addCategoryId) ? addMember : null,
       text,
       createdAt: now,
       updatedAt: now,
@@ -972,12 +1023,17 @@
     addCategoryId = categorySelect.value;
     selectedCategoryId = addCategoryId;
     selectedGenre = null;
+    selectedMember = null;
     if (GENRE_CATEGORY_IDS.includes(addCategoryId)) addGenre = GENRES[0].id;
+    if (MEMBER_CATEGORY_IDS.includes(addCategoryId)) addMember = MEMBERS[0].id;
     noteInput.placeholder = categoryById(addCategoryId).placeholder;
     render();
   });
   genreSelect.addEventListener('change', () => {
     addGenre = genreSelect.value;
+  });
+  memberSelect.addEventListener('change', () => {
+    addMember = memberSelect.value;
   });
   frequencySelect.addEventListener('change', () => {
     addFrequency = frequencySelect.value;
