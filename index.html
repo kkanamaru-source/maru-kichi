@@ -666,13 +666,13 @@
     text.textContent = labels[syncStatus] || '';
   }
 
-  async function ghLoad() {
+  async function ghLoad(fallbackNotes = []) {
     setSyncStatus('syncing');
     try {
       const res = await ghFetch(`${encodeURIComponent(ghConfig.path)}?ref=${encodeURIComponent(ghConfig.branch)}`);
       if (res.status === 404) {
-        await ghSave([]);
-        notes = [];
+        await ghSave(fallbackNotes);
+        notes = fallbackNotes;
         setSyncStatus('synced');
         return;
       }
@@ -1119,18 +1119,28 @@
     }
     ghModalStatus.textContent = '接続を確認しています…';
     ghModalStatus.className = 'modal-status';
+    const localNotesBeforeConnect = notes;
     const newConfig = { owner, repo, path, branch, token };
     ghConfig = newConfig;
     ghSha = null;
-    await ghLoad();
+    await ghLoad(localNotesBeforeConnect);
     if (syncStatus === 'synced') {
+      const remoteIds = new Set(notes.map(n => n.id));
+      const unsyncedLocal = localNotesBeforeConnect.filter(n => !remoteIds.has(n.id));
+      if (unsyncedLocal.length > 0) {
+        notes = notes.concat(unsyncedLocal);
+        await ghSave(notes);
+      }
       saveGhConfig(newConfig);
-      ghModalStatus.textContent = '接続できました。';
+      ghModalStatus.textContent = unsyncedLocal.length > 0
+        ? `接続できました。この端末だけにあった${unsyncedLocal.length}件のメモも取り込みました。`
+        : '接続できました。';
       ghModalStatus.className = 'modal-status ok';
       render();
-      setTimeout(closeGhModal, 700);
+      setTimeout(closeGhModal, 900);
     } else {
       ghConfig = loadGhConfig();
+      notes = localNotesBeforeConnect;
       ghModalStatus.textContent = '接続に失敗しました。ユーザー名・リポジトリ名・トークンの権限を確認してください。';
       ghModalStatus.className = 'modal-status error';
     }
@@ -1175,7 +1185,7 @@
   async function initApp() {
     updateSyncBadge();
     if (ghConfig) {
-      await ghLoad();
+      await ghLoad(notes);
     }
     spawnDueTasks();
     render();
