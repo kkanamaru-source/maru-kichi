@@ -477,6 +477,7 @@
     <div class="menu" id="menu" style="display:none;">
       <button id="ghSettingsBtn">GitHub連携設定</button>
       <button id="sheetsSettingsBtn">スプレッドシート連携設定</button>
+      <button id="slackSettingsBtn">Slack通知設定</button>
       <button id="exportBtn">JSONをエクスポート</button>
       <button id="importBtn">JSONをインポート</button>
     </div>
@@ -523,6 +524,23 @@
       </div>
     </div>
     <p class="modal-status" id="sheetsModalStatus"></p>
+  </div>
+</div>
+
+<div class="modal-overlay" id="slackModalOverlay" style="display:none;">
+  <div class="modal">
+    <h3>Slack通知設定</h3>
+    <p class="modal-desc">タスクを追加・完了したときにSlackへ通知します。SlackのIncoming Webhook URLを入力してください。</p>
+    <label>Incoming Webhook URL</label>
+    <input type="text" id="slackWebhookUrl" placeholder="https://hooks.slack.com/services/..." />
+    <div class="modal-footer">
+      <button class="btn-secondary" id="slackDisconnectBtn">連携を解除</button>
+      <div class="btn-group">
+        <button class="btn-secondary" id="slackCancelBtn">キャンセル</button>
+        <button class="btn-primary" id="slackSaveBtn">保存</button>
+      </div>
+    </div>
+    <p class="modal-status" id="slackModalStatus"></p>
   </div>
 </div>
 
@@ -651,6 +669,22 @@
     }).catch(e => console.error('sheets sync failed', e));
   }
 
+  const SLACK_WEBHOOK_KEY = 'maru-kichi-slack-webhook';
+  function loadSlackWebhook() { return localStorage.getItem(SLACK_WEBHOOK_KEY) || ''; }
+  function saveSlackWebhook(url) { localStorage.setItem(SLACK_WEBHOOK_KEY, url); }
+  function clearSlackWebhook() { localStorage.removeItem(SLACK_WEBHOOK_KEY); }
+
+  function slackNotify(text) {
+    const url = loadSlackWebhook();
+    if (!url) return;
+    fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ text }),
+    }).catch(e => console.error('slack notify failed', e));
+  }
+
   function utf8ToBase64(str) {
     return btoa(String.fromCharCode(...new TextEncoder().encode(str)));
   }
@@ -777,9 +811,11 @@
           frequency: null,
           lastSpawnedAt: null,
           sourceRoutineId: note.id,
+          dueDate: null,
         });
         note.lastSpawnedAt = now;
         changed = true;
+        slackNotify(`🔁 定例業務から新しいタスク: ${note.text}`);
       }
     }
     if (changed) persist();
@@ -968,6 +1004,7 @@
           note.completedAt = note.done ? Date.now() : null;
           note.updatedAt = Date.now();
           persist();
+          if (note.done) slackNotify(`✅ 完了: ${note.text}`);
           render();
         });
       }
@@ -1025,6 +1062,10 @@
       dueDate: addCategoryId === 'tasks' && addDueDate ? addDueDate : null,
     });
     persist();
+    if (addCategoryId === 'tasks') {
+      const dueLabel = addDueDate ? `　期限: ${addDueDate.replace(/-/g, '/')}` : '';
+      slackNotify(`🆕 新しいタスク: ${text}${dueLabel}`);
+    }
     noteInput.value = '';
     addDueDate = '';
     selectedCategoryId = addCategoryId;
@@ -1262,6 +1303,42 @@
     sheetsModalStatus.textContent = '保存しました。';
     sheetsModalStatus.className = 'modal-status ok';
     setTimeout(closeSheetsModal, 700);
+  });
+
+  const slackModalOverlay = document.getElementById('slackModalOverlay');
+  const slackWebhookInput = document.getElementById('slackWebhookUrl');
+  const slackModalStatus = document.getElementById('slackModalStatus');
+
+  function openSlackModal() {
+    menu.style.display = 'none';
+    slackWebhookInput.value = loadSlackWebhook();
+    slackModalStatus.textContent = '';
+    slackModalStatus.className = 'modal-status';
+    slackModalOverlay.style.display = 'flex';
+  }
+  function closeSlackModal() { slackModalOverlay.style.display = 'none'; }
+
+  document.getElementById('slackSettingsBtn').addEventListener('click', openSlackModal);
+  document.getElementById('slackCancelBtn').addEventListener('click', closeSlackModal);
+  slackModalOverlay.addEventListener('click', (e) => {
+    if (e.target === slackModalOverlay) closeSlackModal();
+  });
+  document.getElementById('slackDisconnectBtn').addEventListener('click', () => {
+    clearSlackWebhook();
+    closeSlackModal();
+  });
+  document.getElementById('slackSaveBtn').addEventListener('click', () => {
+    const url = slackWebhookInput.value.trim();
+    if (!url) {
+      slackModalStatus.textContent = 'URLを入力してください。';
+      slackModalStatus.className = 'modal-status error';
+      return;
+    }
+    saveSlackWebhook(url);
+    slackNotify('🔔 マル基地からのSlack通知設定が完了しました。');
+    slackModalStatus.textContent = '保存しました。';
+    slackModalStatus.className = 'modal-status ok';
+    setTimeout(closeSlackModal, 700);
   });
 
   async function initApp() {
