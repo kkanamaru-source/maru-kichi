@@ -487,8 +487,18 @@
 
 <div class="modal-overlay" id="ghModalOverlay" style="display:none;">
   <div class="modal">
-    <h3>GitHub連携設定</h3>
-    <p class="modal-desc">GitHubリポジトリにメモを保存すると、スマホとPCで同じ内容が見られるようになります。トークンはこの端末のブラウザだけに保存され、外部には送信されません。</p>
+    <h3>同期の設定</h3>
+    <p class="modal-desc"><strong>合言葉だけで同期できます。</strong>新しい端末で開いたときは、合言葉を入れれば全メモが読み込まれます。GitHubのトークンは不要です。</p>
+    <label>合言葉</label>
+    <input type="password" id="maruPass" placeholder="決めた合言葉を入力" />
+    <div class="modal-footer" style="margin-bottom:18px;">
+      <button class="btn-secondary" id="passClearBtn">合言葉を消す</button>
+      <div class="btn-group">
+        <button class="btn-primary" id="passSaveBtn">合言葉で接続</button>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:18px 0;" />
+    <p class="modal-desc" style="font-size:12px;">以下は従来のGitHub直接接続です。合言葉を使う場合は触らなくて構いません。</p>
     <label>GitHubユーザー名（Owner）</label>
     <input type="text" id="ghOwner" placeholder="例: kanamaru-kenya" />
     <label>リポジトリ名</label>
@@ -608,7 +618,14 @@
     { id: 'hiroto', label: '大翔' },
     { id: 'leo', label: 'レオ' },
   ];
+  // メンバー特性は「誰についてのメモか」、タスク・定例業務は「誰がやるか」
   const MEMBER_CATEGORY_IDS = ['member_traits'];
+  const ASSIGNEE_CATEGORY_IDS = ['tasks', 'routine_ops'];
+  function memberFieldFor(categoryId) {
+    if (MEMBER_CATEGORY_IDS.includes(categoryId)) return 'member';
+    if (ASSIGNEE_CATEGORY_IDS.includes(categoryId)) return 'assignee';
+    return null;
+  }
 
   const FREQUENCIES = [
     { id: 'daily', label: '毎日', days: 1 },
@@ -706,6 +723,32 @@
     });
   }
 
+  // 合言葉方式：GitHubトークンはApps Script側に置き、この端末は合言葉だけ持つ
+  const PROXY_URL = 'https://script.google.com/macros/s/AKfycbxphBWBMaysQmDcP2z_08qMbroNT1940n2rjXgCJgmgcM4h23n9msUHpq-Lx8IBx9Xh/exec';
+  const PASS_KEY = 'maru-kichi-pass';
+  function loadPass() { return localStorage.getItem(PASS_KEY) || ''; }
+  function savePass(p) { localStorage.setItem(PASS_KEY, p); }
+  function clearPass() { localStorage.removeItem(PASS_KEY); }
+
+  async function proxyCall(params) {
+    const body = new URLSearchParams(params);
+    const res = await fetch(PROXY_URL, { method: 'POST', body });
+    if (!res.ok) throw new Error(`中継サーバーエラー: ${res.status}`);
+    return res.json();
+  }
+
+  async function proxyLoad(pass) {
+    const data = await proxyCall({ action: 'load', pass });
+    if (!data.ok) throw new Error(data.error || '読み込みに失敗しました');
+    return data.notes;
+  }
+
+  async function proxySave(pass, notesArray) {
+    const data = await proxyCall({ action: 'save', pass, notes: JSON.stringify(notesArray) });
+    if (!data.ok) throw new Error(data.error || '保存に失敗しました');
+    return data;
+  }
+
   function setSyncStatus(status) {
     syncStatus = status;
     updateSyncBadge();
@@ -719,7 +762,7 @@
     const labels = {
       local: 'ローカル保存のみ',
       syncing: '同期中…',
-      synced: 'GitHubと同期済み',
+      synced: loadPass() ? '合言葉で同期済み' : 'GitHubと同期済み',
       error: '同期エラー（ローカルに保存）',
     };
     text.textContent = labels[syncStatus] || '';
@@ -727,6 +770,26 @@
 
   async function ghLoad(fallbackNotes = []) {
     setSyncStatus('syncing');
+
+    // 合言葉が設定されていれば中継サーバー経由で読む
+    const pass = loadPass();
+    if (pass) {
+      try {
+        const remote = await proxyLoad(pass);
+        const remoteIds = new Set(remote.map(n => n.id));
+        const unsynced = fallbackNotes.filter(n => !remoteIds.has(n.id));
+        notes = remote.concat(unsynced);
+        saveNotes(notes);
+        if (unsynced.length > 0) await proxySave(pass, notes);
+        setSyncStatus('synced');
+        return;
+      } catch (e) {
+        console.error('proxyLoad failed', e);
+        setSyncStatus('error');
+        return;
+      }
+    }
+
     try {
       const res = await ghFetch(`${encodeURIComponent(ghConfig.path)}?ref=${encodeURIComponent(ghConfig.branch)}`);
       if (res.status === 404) {
@@ -749,6 +812,21 @@
 
   async function ghSave(notesArray, retry = true) {
     setSyncStatus('syncing');
+
+    const pass = loadPass();
+    if (pass) {
+      try {
+        await proxySave(pass, notesArray);
+        saveNotes(notesArray);
+        setSyncStatus('synced');
+      } catch (e) {
+        console.error('proxySave failed', e);
+        saveNotes(notesArray);
+        setSyncStatus('error');
+      }
+      return;
+    }
+
     try {
       const body = {
         message: `update notes ${new Date().toISOString()}`,
@@ -781,7 +859,7 @@
   }
 
   function persist() {
-    if (ghConfig) {
+    if (loadPass() || ghConfig) {
       ghSave(notes);
     } else {
       saveNotes(notes);
@@ -850,6 +928,7 @@
   let addCategoryId = CATEGORIES[0].id;
   let addGenre = GENRES[0].id;
   let addMember = MEMBERS[0].id;
+  let addAssignee = '';
   let addFrequency = FREQUENCIES[1].id;
   let addDueDate = '';
   let selectedGenre = null;
@@ -857,7 +936,7 @@
   let searchQuery = '';
   let ghConfig = loadGhConfig();
   let ghSha = null;
-  let syncStatus = ghConfig ? 'syncing' : 'local';
+  let syncStatus = (loadPass() || ghConfig) ? 'syncing' : 'local';
 
   const sidebarList = document.getElementById('sidebarList');
   const categorySelect = document.getElementById('categorySelect');
@@ -917,11 +996,17 @@
       genreSelect.value = addGenre;
     }
 
-    const showMember = MEMBER_CATEGORY_IDS.includes(addCategoryId);
-    memberSelect.style.display = showMember ? '' : 'none';
-    if (showMember) {
+    const memberField = memberFieldFor(addCategoryId);
+    memberSelect.style.display = memberField ? '' : 'none';
+    if (memberField === 'member') {
+      memberSelect.title = 'メンバー';
       memberSelect.innerHTML = MEMBERS.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
       memberSelect.value = addMember;
+    } else if (memberField === 'assignee') {
+      memberSelect.title = '担当者';
+      memberSelect.innerHTML = '<option value="">担当者なし</option>'
+        + MEMBERS.map(m => `<option value="${m.id}">担当: ${m.label}</option>`).join('');
+      memberSelect.value = addAssignee;
     }
 
     const showFrequency = addCategoryId === 'routine_ops';
@@ -955,7 +1040,7 @@
   }
 
   function renderMemberFilterRow() {
-    const showFilter = MEMBER_CATEGORY_IDS.includes(selectedCategoryId);
+    const showFilter = memberFieldFor(selectedCategoryId) !== null;
     memberFilterRow.style.display = showFilter ? '' : 'none';
     if (!showFilter) return;
     const pills = [{ id: null, label: 'すべて' }, ...MEMBERS];
@@ -995,7 +1080,10 @@
       const dateStr = dt.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
       const metaCat = selectedCategoryId === ALL_ID ? `<span>${cat.icon} ${cat.label}</span>` : '';
       const metaGenre = note.genre ? `<span class="genre-badge">${genreById(note.genre).label}</span>` : '';
-      const metaMember = note.member ? `<span class="genre-badge">${memberById(note.member).label}</span>` : '';
+      const memberLabel = note.member && memberById(note.member) ? memberById(note.member).label : '';
+      const metaMember = memberLabel ? `<span class="genre-badge">${memberLabel}</span>` : '';
+      const assigneeLabel = note.assignee && memberById(note.assignee) ? memberById(note.assignee).label : '';
+      const metaAssignee = assigneeLabel ? `<span class="genre-badge">👤 ${assigneeLabel}</span>` : '';
       const isTask = note.categoryId === 'tasks';
       const metaDone = note.done && note.completedAt
         ? `<span>✅ ${new Date(note.completedAt).toLocaleDateString('ja-JP')} 完了</span>`
@@ -1020,7 +1108,7 @@
         ${checkboxHtml}
         <div class="note-main">
           <div class="note-body"></div>
-          <div class="note-meta">${metaCat}${metaGenre}${metaMember}${metaFrequency}${metaNextDue}${metaAutoGenerated}${metaDueDate}${metaDone}<span>${dateStr}</span></div>
+          <div class="note-meta">${metaCat}${metaGenre}${metaMember}${metaAssignee}${metaFrequency}${metaNextDue}${metaAutoGenerated}${metaDueDate}${metaDone}<span>${dateStr}</span></div>
         </div>
         <button class="delete-btn" title="削除">✕</button>
       `;
@@ -1051,8 +1139,9 @@
     if (selectedGenre && GENRE_CATEGORY_IDS.includes(selectedCategoryId)) {
       items = items.filter(n => n.genre === selectedGenre);
     }
-    if (selectedMember && MEMBER_CATEGORY_IDS.includes(selectedCategoryId)) {
-      items = items.filter(n => n.member === selectedMember);
+    const memberField = memberFieldFor(selectedCategoryId);
+    if (selectedMember && memberField) {
+      items = items.filter(n => n[memberField] === selectedMember);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
@@ -1078,6 +1167,7 @@
       categoryId: addCategoryId,
       genre: GENRE_CATEGORY_IDS.includes(addCategoryId) ? addGenre : null,
       member: MEMBER_CATEGORY_IDS.includes(addCategoryId) ? addMember : null,
+      assignee: ASSIGNEE_CATEGORY_IDS.includes(addCategoryId) ? (addAssignee || null) : null,
       text,
       createdAt: now,
       updatedAt: now,
@@ -1117,6 +1207,7 @@
     selectedMember = null;
     if (GENRE_CATEGORY_IDS.includes(addCategoryId)) addGenre = GENRES[0].id;
     if (MEMBER_CATEGORY_IDS.includes(addCategoryId)) addMember = MEMBERS[0].id;
+    addAssignee = '';
     addDueDate = '';
     noteInput.placeholder = categoryById(addCategoryId).placeholder;
     render();
@@ -1238,11 +1329,52 @@
     ghPathInput.value = cfg.path || 'notes.json';
     ghBranchInput.value = cfg.branch || 'main';
     ghTokenInput.value = cfg.token || '';
+    maruPassInput.value = loadPass();
     ghModalStatus.textContent = '';
     ghModalStatus.className = 'modal-status';
     ghModalOverlay.style.display = 'flex';
   }
   function closeGhModal() { ghModalOverlay.style.display = 'none'; }
+
+  const maruPassInput = document.getElementById('maruPass');
+
+  document.getElementById('passSaveBtn').addEventListener('click', async () => {
+    const pass = maruPassInput.value.trim();
+    if (!pass) {
+      ghModalStatus.textContent = '合言葉を入力してください。';
+      ghModalStatus.className = 'modal-status error';
+      return;
+    }
+    ghModalStatus.textContent = '接続を確認しています…';
+    ghModalStatus.className = 'modal-status';
+    try {
+      const remote = await proxyLoad(pass);
+      const remoteIds = new Set(remote.map(n => n.id));
+      const unsynced = notes.filter(n => !remoteIds.has(n.id));
+      notes = remote.concat(unsynced);
+      savePass(pass);
+      saveNotes(notes);
+      if (unsynced.length > 0) await proxySave(pass, notes);
+      setSyncStatus('synced');
+      ghModalStatus.textContent = unsynced.length > 0
+        ? `接続できました。${remote.length}件を読み込み、この端末だけにあった${unsynced.length}件も統合しました。`
+        : `接続できました。${remote.length}件を読み込みました。`;
+      ghModalStatus.className = 'modal-status ok';
+      render();
+      setTimeout(closeGhModal, 1200);
+    } catch (e) {
+      ghModalStatus.textContent = e.message;
+      ghModalStatus.className = 'modal-status error';
+    }
+  });
+
+  document.getElementById('passClearBtn').addEventListener('click', () => {
+    clearPass();
+    maruPassInput.value = '';
+    setSyncStatus(ghConfig ? 'syncing' : 'local');
+    ghModalStatus.textContent = 'この端末から合言葉を消しました。';
+    ghModalStatus.className = 'modal-status ok';
+  });
 
   document.getElementById('ghSettingsBtn').addEventListener('click', openGhModal);
   document.getElementById('ghCancelBtn').addEventListener('click', closeGhModal);
@@ -1373,7 +1505,7 @@
 
   async function initApp() {
     updateSyncBadge();
-    if (ghConfig) {
+    if (loadPass() || ghConfig) {
       await ghLoad(notes);
     }
     spawnDueTasks();
