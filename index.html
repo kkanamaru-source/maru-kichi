@@ -284,6 +284,22 @@
     padding: 2px 10px;
     font-size: 11.5px;
   }
+  .note-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .mini-btn {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text-muted);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .mini-btn:hover { color: var(--text); border-color: var(--accent); }
+  .mini-btn:disabled { opacity: 0.5; cursor: default; }
+  .mini-btn.slack-btn.on { color: var(--accent); border-color: var(--accent); }
+  .genre-badge.slack-on { background: #e6f7ee; color: #1b8f5a; }
+  body.secret-mode .genre-badge.slack-on { background: #123527; color: #4ade9b; }
   .genre-badge.overdue {
     background: #ffe3e3;
     color: #d9364f;
@@ -554,6 +570,28 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="editModalOverlay" style="display:none;">
+  <div class="modal">
+    <h3>タスクを編集</h3>
+    <label>内容</label>
+    <textarea id="editText" rows="5" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+    <label>ジャンル</label>
+    <select id="editGenre" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;"></select>
+    <label>担当者</label>
+    <select id="editAssignee" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;"></select>
+    <label>期限</label>
+    <input type="date" id="editDue" style="width:100%;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;" />
+    <div class="modal-footer">
+      <span></span>
+      <div class="btn-group">
+        <button class="btn-secondary" id="editCancelBtn">キャンセル</button>
+        <button class="btn-primary" id="editSaveBtn">保存</button>
+      </div>
+    </div>
+    <p class="modal-status" id="editModalStatus"></p>
+  </div>
+</div>
+
 <div class="layout">
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
   <nav class="sidebar" id="sidebarNav">
@@ -617,6 +655,7 @@
     { id: 'yuma', label: '悠馬' },
     { id: 'hiroto', label: '大翔' },
     { id: 'leo', label: 'レオ' },
+    { id: 'naoki', label: '直樹' },
   ];
   // メンバー特性は「誰についてのメモか」、タスク・定例業務は「誰がやるか」
   const MEMBER_CATEGORY_IDS = ['member_traits'];
@@ -741,6 +780,33 @@
     const data = await proxyCall({ action: 'load', pass });
     if (!data.ok) throw new Error(data.error || '読み込みに失敗しました');
     return data.notes;
+  }
+
+  // マル基地のタスクをSlack側へ出す／直す／取り消す
+  async function proxyPushTask(note) {
+    const label = note.assignee && memberById(note.assignee) ? memberById(note.assignee).label : '';
+    const data = await proxyCall({
+      action: 'pushTask', pass: loadPass(),
+      text: note.text, assignee: label, due: note.dueDate || '',
+    });
+    if (!data.ok) throw new Error(data.error || 'Slackへの反映に失敗しました');
+    return data.taskId;
+  }
+
+  async function proxyUpdateTask(note) {
+    const label = note.assignee && memberById(note.assignee) ? memberById(note.assignee).label : '';
+    const data = await proxyCall({
+      action: 'updateTask', pass: loadPass(), taskId: note.slackTaskId,
+      text: note.text, assignee: label, due: note.dueDate || '',
+    });
+    if (!data.ok) throw new Error(data.error || 'Slack側の更新に失敗しました');
+  }
+
+  async function proxyUnpushTask(note) {
+    const data = await proxyCall({
+      action: 'unpushTask', pass: loadPass(), taskId: note.slackTaskId,
+    });
+    if (!data.ok) throw new Error(data.error || 'Slackからの取り消しに失敗しました');
   }
 
   async function proxySave(pass, notesArray) {
@@ -915,6 +981,7 @@
           lastSpawnedAt: null,
           sourceRoutineId: note.id,
           dueDate,
+          slackTaskId: null,
         });
         note.lastSpawnedAt = now;
         slackNotify(`🔁 定例業務のタスク: ${note.text}　期限: ${dueDate.replace(/-/g, '/')}`);
@@ -1104,15 +1171,50 @@
       const checkboxHtml = isTask
         ? `<input type="checkbox" class="task-check" ${note.done ? 'checked' : ''} title="完了にする" />`
         : '';
+      const metaSlack = isTask && note.slackTaskId
+        ? `<span class="genre-badge slack-on">💬 Slack #${note.slackTaskId}</span>`
+        : '';
+      const actionsHtml = isTask
+        ? `<div class="note-actions">
+             <button class="mini-btn edit-btn" title="編集">✏️ 編集</button>
+             <button class="mini-btn slack-btn${note.slackTaskId ? ' on' : ''}">${note.slackTaskId ? '💬 Slackから外す' : '💬 Slackに出す'}</button>
+           </div>`
+        : '';
       li.innerHTML = `
         ${checkboxHtml}
         <div class="note-main">
           <div class="note-body"></div>
-          <div class="note-meta">${metaCat}${metaGenre}${metaMember}${metaAssignee}${metaFrequency}${metaNextDue}${metaAutoGenerated}${metaDueDate}${metaDone}<span>${dateStr}</span></div>
+          <div class="note-meta">${metaCat}${metaGenre}${metaMember}${metaAssignee}${metaFrequency}${metaNextDue}${metaAutoGenerated}${metaDueDate}${metaSlack}${metaDone}<span>${dateStr}</span></div>
+          ${actionsHtml}
         </div>
         <button class="delete-btn" title="削除">✕</button>
       `;
       li.querySelector('.note-body').textContent = note.text;
+      if (isTask) {
+        li.querySelector('.edit-btn').addEventListener('click', () => openEditModal(note));
+        const slackBtn = li.querySelector('.slack-btn');
+        slackBtn.addEventListener('click', async () => {
+          slackBtn.disabled = true;
+          const original = slackBtn.textContent;
+          try {
+            if (note.slackTaskId) {
+              slackBtn.textContent = '取り消し中…';
+              await proxyUnpushTask(note);
+              note.slackTaskId = null;
+            } else {
+              slackBtn.textContent = '送信中…';
+              note.slackTaskId = await proxyPushTask(note);
+            }
+            note.updatedAt = Date.now();
+            persist();
+            render();
+          } catch (err) {
+            slackBtn.textContent = original;
+            slackBtn.disabled = false;
+            alert(err.message);
+          }
+        });
+      }
       if (isTask) {
         li.querySelector('.task-check').addEventListener('change', (e) => {
           note.done = e.target.checked;
@@ -1180,6 +1282,7 @@
         : null,
       sourceRoutineId: null,
       dueDate: addCategoryId === 'tasks' && addDueDate ? addDueDate : null,
+      slackTaskId: null,
     });
     persist();
     if (addCategoryId === 'tasks') {
@@ -1501,6 +1604,68 @@
     slackModalStatus.textContent = '保存しました。';
     slackModalStatus.className = 'modal-status ok';
     setTimeout(closeSlackModal, 700);
+  });
+
+  // ===== タスクの編集 =====
+  const editModalOverlay = document.getElementById('editModalOverlay');
+  const editText = document.getElementById('editText');
+  const editGenre = document.getElementById('editGenre');
+  const editAssignee = document.getElementById('editAssignee');
+  const editDue = document.getElementById('editDue');
+  const editModalStatus = document.getElementById('editModalStatus');
+  let editingNote = null;
+
+  function openEditModal(note) {
+    editingNote = note;
+    editText.value = note.text;
+    editGenre.innerHTML = GENRES.map(g => `<option value="${g.id}">${g.label}</option>`).join('');
+    editGenre.value = note.genre || GENRES[0].id;
+    editAssignee.innerHTML = '<option value="">担当者なし</option>'
+      + MEMBERS.map(m => `<option value="${m.id}">${m.label}</option>`).join('');
+    editAssignee.value = note.assignee || '';
+    editDue.value = note.dueDate || '';
+    editModalStatus.textContent = note.slackTaskId
+      ? `Slackにも出しているタスクです（#${note.slackTaskId}）。保存するとSlack側も更新されます。`
+      : '';
+    editModalStatus.className = 'modal-status';
+    editModalOverlay.style.display = 'flex';
+    editText.focus();
+  }
+  function closeEditModal() { editModalOverlay.style.display = 'none'; editingNote = null; }
+
+  document.getElementById('editCancelBtn').addEventListener('click', closeEditModal);
+  editModalOverlay.addEventListener('click', (e) => {
+    if (e.target === editModalOverlay) closeEditModal();
+  });
+
+  document.getElementById('editSaveBtn').addEventListener('click', async () => {
+    if (!editingNote) return;
+    const text = editText.value.trim();
+    if (!text) {
+      editModalStatus.textContent = '内容を入力してください。';
+      editModalStatus.className = 'modal-status error';
+      return;
+    }
+    editingNote.text = text;
+    editingNote.genre = editGenre.value || null;
+    editingNote.assignee = editAssignee.value || null;
+    editingNote.dueDate = editDue.value || null;
+    editingNote.updatedAt = Date.now();
+
+    if (editingNote.slackTaskId) {
+      editModalStatus.textContent = 'Slack側も更新しています…';
+      editModalStatus.className = 'modal-status';
+      try {
+        await proxyUpdateTask(editingNote);
+      } catch (err) {
+        editModalStatus.textContent = err.message;
+        editModalStatus.className = 'modal-status error';
+        return;
+      }
+    }
+    persist();
+    render();
+    closeEditModal();
   });
 
   async function initApp() {
