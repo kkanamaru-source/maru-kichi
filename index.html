@@ -998,7 +998,8 @@
   let addCategoryId = CATEGORIES[0].id;
   let addGenre = GENRES[0].id;
   let addMember = MEMBERS[0].id;
-  let addAssignee = '';
+  const DEFAULT_ASSIGNEE = 'maru';
+  let addAssignee = DEFAULT_ASSIGNEE;
   let addFrequency = FREQUENCIES[1].id;
   let addDueDate = '';
   let selectedGenre = null;
@@ -1368,7 +1369,7 @@
     selectedMember = null;
     if (GENRE_CATEGORY_IDS.includes(addCategoryId)) addGenre = GENRES[0].id;
     if (MEMBER_CATEGORY_IDS.includes(addCategoryId)) addMember = MEMBERS[0].id;
-    addAssignee = '';
+    addAssignee = DEFAULT_ASSIGNEE;
     addDueDate = '';
     noteInput.placeholder = categoryById(addCategoryId).placeholder;
     render();
